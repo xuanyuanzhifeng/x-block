@@ -12,27 +12,39 @@
     "会疼人",
     "领我",
     "认识吗",
-    "快来领我"
+    "快来领我",
+    "约p",
+    "同城",
+    "骚货",
+    "打✈️",
+    "好涩",
+    "她骚",
+    "她sao",
+    "sao货",
+    "真人",
+    "谁来"
   ];
+  const PROFILE_BLOCK_KEYWORDS = ["约炮", "同城", "免费", "破处", "约p", "主页", "附近"];
 
   function normalizeWhitespace(text) {
     return text.replace(/\s+/g, " ").trim();
-  }
-
-  function stripEmoji(text) {
-    return text
-      .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
-      .replace(/[\u{2600}-\u{27BF}]/gu, "")
-      .replace(/[\u{FE00}-\u{FE0F}]/gu, "")
-      .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "");
   }
 
   function containsEmoji(text) {
     return /[\p{Extended_Pictographic}\uFE0F]/u.test(text || "");
   }
 
+  function containsBlockedProfileEmoji(text) {
+    return (text || "").includes("🌸");
+  }
+
+  function findBlockedProfileKeyword(text) {
+    const normalized = normalizeWhitespace(text || "");
+    return PROFILE_BLOCK_KEYWORDS.find((keyword) => normalized.includes(keyword)) || "";
+  }
+
   function sanitizeForRule(text) {
-    return normalizeWhitespace(stripEmoji(text)).replace(/[^\p{Script=Han}\p{Letter}\p{Number} ]/gu, "");
+    return normalizeWhitespace(text || "").replace(/[^\p{Script=Han}\p{Letter}\p{Number}\p{Symbol}\p{Extended_Pictographic}\uFE0F\u200D ]/gu, "");
   }
 
   function hasChinese(text) {
@@ -92,7 +104,7 @@
 
   function buildKeywordList(settings) {
     return [...settings.shortKeywords, ...settings.customShortKeywords]
-      .map((item) => normalizeWhitespace(item))
+      .map((item) => sanitizeForRule(item))
       .filter(Boolean);
   }
 
@@ -108,7 +120,7 @@
       };
     }
 
-    if (countChineseAwareLength(normalized) > 20) {
+    if (countChineseAwareLength(normalized) > 40) {
       return {
         matched: false,
         reason: "too-long",
@@ -146,6 +158,16 @@
   function matchProfile(displayName, handle, hasEmojiNode = false) {
     const normalizedName = normalizeWhitespace(displayName || "");
     const normalizedHandle = normalizeWhitespace(handle || "").replace(/^@/, "");
+    const matchedProfileKeyword = findBlockedProfileKeyword(normalizedName);
+
+    if (matchedProfileKeyword) {
+      return {
+        matched: true,
+        reason: "profile-keyword",
+        keyword: `昵称命中:${matchedProfileKeyword}`,
+        cleanedText: normalizedName
+      };
+    }
 
     if (!normalizedHandle) {
       return {
@@ -154,14 +176,14 @@
       };
     }
 
-    if (!hasEmojiNode && !containsEmoji(normalizedName)) {
+    if (!containsBlockedProfileEmoji(normalizedName)) {
       return {
         matched: false,
-        reason: "no-emoji-name"
+        reason: "missing-blocked-profile-emoji"
       };
     }
 
-    if (!/\d{4,}$/.test(normalizedHandle)) {
+    if (!/\d{5,}$/.test(normalizedHandle)) {
       return {
         matched: false,
         reason: "handle-not-numeric-tail"
@@ -170,8 +192,8 @@
 
     return {
       matched: true,
-      reason: "emoji-number-id",
-      keyword: "昵称含 emoji + 数字ID",
+      reason: "flower-number-id",
+      keyword: "昵称含🌸 + 5位数字ID",
       cleanedText: normalizedHandle
     };
   }
@@ -189,6 +211,8 @@
     DEFAULT_SHORT_KEYWORDS,
     STORAGE_KEY,
     containsEmoji,
+    containsBlockedProfileEmoji,
+    findBlockedProfileKeyword,
     createDefaultSettings,
     getSettings,
     saveSettings,

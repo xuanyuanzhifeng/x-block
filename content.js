@@ -3,6 +3,19 @@
   const TEXT_SELECTOR = '[data-testid="tweetText"]';
   const NAME_SELECTOR = '[data-testid="User-Name"]';
   const AVATAR_SELECTOR = '[data-testid="Tweet-User-Avatar"]';
+  const NON_TEXT_SELECTORS = [
+    '[data-testid="tweetPhoto"]',
+    '[data-testid="card.wrapper"]',
+    '[data-testid="videoComponent"]',
+    '[data-testid="videoPlayer"]',
+    '[data-testid="previewInterstitial"]',
+    '[data-testid="attachments"]',
+    '[data-testid="tweet-media"]',
+    '[data-testid="media-tweet-card"]',
+    '[data-testid="socialContext"]',
+    '[role="blockquote"]',
+    'article[role="article"] article[role="article"]'
+  ];
   const PROCESSED_ATTR = "data-xhb-processed";
   const MASKED_ATTR = "data-xhb-masked";
   const REVEALED_ATTR = "data-xhb-revealed";
@@ -40,18 +53,62 @@
     return article.querySelector(TEXT_SELECTOR);
   }
 
+  function extractNodeText(node) {
+    if (!node) {
+      return "";
+    }
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent || "";
+    }
+
+    if (!(node instanceof HTMLElement)) {
+      return "";
+    }
+
+    if (node.tagName === "IMG") {
+      return node.getAttribute("alt") || "";
+    }
+
+    if (node.tagName === "BR") {
+      return "\n";
+    }
+
+    return Array.from(node.childNodes).map((child) => extractNodeText(child)).join("");
+  }
+
+  function getNodeText(node) {
+    if (!node) {
+      return "";
+    }
+
+    return extractNodeText(node) || node.innerText || node.textContent || "";
+  }
+
   function getArticleText(article) {
     const textNode = findTextNode(article);
     if (!textNode) {
       return "";
     }
 
-    return textNode.innerText || textNode.textContent || "";
+    return getNodeText(textNode);
+  }
+
+  function isPureTextArticle(article) {
+    const textNode = findTextNode(article);
+    if (!textNode) {
+      return false;
+    }
+
+    return !NON_TEXT_SELECTORS.some((selector) => {
+      const matched = article.querySelector(selector);
+      return matched && !textNode.contains(matched);
+    });
   }
 
   function getProfileData(article) {
     const nameNode = article.querySelector(NAME_SELECTOR);
-    const rawText = nameNode?.innerText || nameNode?.textContent || "";
+    const rawText = getNodeText(nameNode);
     const normalized = rawText.replace(/\s+/g, " ").trim();
     const hasEmojiNode = Boolean(
       nameNode?.querySelector('img[alt], img[src*="emoji"], img[src*="twimg"], svg[aria-label*="emoji" i]')
@@ -195,6 +252,11 @@
     const text = getArticleText(article);
     const profile = getProfileData(article);
     if (!text && !profile.displayName && !profile.handle && !profile.hasEmojiNode) {
+      clearMask(article);
+      return;
+    }
+
+    if (!isPureTextArticle(article)) {
       clearMask(article);
       return;
     }
